@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic Tac Toe | Andika Pratama</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="1" y="1" width="6.2" height="6.2" rx="1.4" stroke="var(--ink-dim)" stroke-width="1.4"/>
+            <rect x="8.9" y="1" width="6.2" height="6.2" rx="1.4" stroke="var(--x-color)" stroke-width="1.4"/>
+            <rect x="16.8" y="1" width="6.2" height="6.2" rx="1.4" stroke="var(--ink-dim)" stroke-width="1.4"/>
+            <rect x="1" y="8.9" width="6.2" height="6.2" rx="1.4" stroke="var(--ink-dim)" stroke-width="1.4"/>
+            <rect x="8.9" y="8.9" width="6.2" height="6.2" rx="1.4" stroke="var(--o-color)" stroke-width="1.4"/>
+            <rect x="16.8" y="8.9" width="6.2" height="6.2" rx="1.4" stroke="var(--ink-dim)" stroke-width="1.4"/>
+            <rect x="1" y="16.8" width="6.2" height="6.2" rx="1.4" stroke="var(--ink-dim)" stroke-width="1.4"/>
+            <rect x="8.9" y="16.8" width="6.2" height="6.2" rx="1.4" stroke="var(--ink-dim)" stroke-width="1.4"/>
+            <rect x="16.8" y="16.8" width="6.2" height="6.2" rx="1.4" stroke="var(--ink-dim)" stroke-width="1.4"/>
+          </svg>
+        </span>
+        <span>
+          <span class="brand-name">Tic Tac Toe</span>
+          <span class="brand-tag">Papan klasik, rasa baru</span>
+        </span>
+      </div>
+
+      <div class="topbar-right">
+        <button class="profile-badge" id="profileBadge" type="button" aria-haspopup="dialog" aria-label="Lihat atau edit profil">
+          <span class="profile-avatar" id="profileAvatar">
+            <img class="profile-avatar-img" id="profileAvatarImg" alt="" hidden>
+            <span class="profile-avatar-fallback" id="profileAvatarFallback">?</span>
+          </span>
+          <span class="profile-name" id="profileNameLabel">Atur Profil</span>
+          <i class="fa-solid fa-pen profile-edit-icon" aria-hidden="true"></i>
+        </button>
+
+        <div class="mode-toggle" id="modeToggle" role="group" aria-label="Mode permainan">
+          <span class="mode-indicator" aria-hidden="true"></span>
+          <button class="mode-btn active" id="modeVsPlayer" type="button">2 Pemain</button>
+          <button class="mode-btn" id="modeVsBot" type="button">Lawan Bot</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <div class="board-column">
+        <section class="board-panel" id="boardPanel">
+          <div class="board-glow" id="boardGlow" aria-hidden="true"></div>
+          <div class="board-card">
+            <canvas id="gameCanvas" aria-label="Papan permainan Tic Tac Toe, 3 kali 3 kotak"></canvas>
+          </div>
+        </section>
+
+        <button class="reset-btn" id="resetBtn" type="button">
+          <i class="fa-solid fa-arrow-rotate-right"></i>
+          Main Lagi
+        </button>
+      </div>
+
+      <aside class="side-panel">
+        <div class="turn-card">
+          <p class="panel-label">Giliran</p>
+          <div class="turn-indicator">
+            <div class="turn-avatar x-avatar active" id="turnX">X</div>
+            <span class="turn-vs">VS</span>
+            <div class="turn-avatar o-avatar" id="turnO">O</div>
+          </div>
+          <p class="status-text" id="status">Giliran <b>X</b> untuk melangkah</p>
+        </div>
+
+        <div class="score-card">
+          <div class="score-item" id="scoreItemX">
+            <i class="fa-solid fa-xmark score-icon x-icon"></i>
+            <div class="score-value" id="scoreX">0</div>
+            <div class="score-label" id="scoreLabelX">Menang X</div>
+          </div>
+          <div class="score-item" id="scoreItemDraw">
+            <i class="fa-solid fa-handshake score-icon draw-icon"></i>
+            <div class="score-value" id="scoreDraw">0</div>
+            <div class="score-label">Seri</div>
+          </div>
+          <div class="score-item" id="scoreItemO">
+            <i class="fa-regular fa-circle score-icon o-icon"></i>
+            <div class="score-value" id="scoreO">0</div>
+            <div class="score-label" id="scoreLabelO">Menang O</div>
+          </div>
+        </div>
+
+        <div class="streak-card">
+          <p class="panel-label">Win Streak</p>
+          <div class="streak-row">
+            <div class="streak-flame" id="streakFlame" aria-hidden="true"><i class="fa-solid fa-fire"></i></div>
+            <div class="streak-info">
+              <p class="streak-value" id="streakValue">Belum ada streak</p>
+              <p class="streak-best" id="streakBest">Rekor terbaik: -</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="leaderboard-card">
+          <p class="panel-label">Papan Peringkat</p>
+          <ul class="lb-list" id="lbList" aria-live="polite">
+            <li class="lb-empty">Menang 2x berturut-turut untuk masuk papan peringkat.</li>
+          </ul>
+          <button class="stats-reset-btn" id="statsResetBtn" type="button">Reset statistik</button>
+        </div>
+
+        <div class="player-lb-card">
+          <p class="panel-label">Leaderboard Pemain</p>
+          <ol class="player-lb-list" id="playerLbList" aria-live="polite"></ol>
+        </div>
+
+        <div class="live-lb-card">
+          <div class="live-lb-head">
+            <p class="panel-label">Leaderboard Pemain (Live)</p>
+            <span class="live-dot" id="liveDot" aria-hidden="true"></span>
+          </div>
+          <p class="live-lb-status" id="liveLbStatus">Menghubungkan...</p>
+          <ol class="live-lb-list" id="liveLbList" aria-live="polite"></ol>
+        </div>
+
+        <div class="achv-card">
+          <p class="panel-label">Achievements</p>
+          <div class="achv-grid" id="achvGrid"></div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div class="achv-toast-container" id="achvToastContainer" aria-live="polite"></div>
+
+  <div class="modal-overlay" id="statsResetOverlay" role="dialog" aria-modal="true" aria-labelledby="statsResetTitle">
+    <div class="modal-card">
+      <p class="modal-title" id="statsResetTitle">Anda yakin ingin mereset ulang statistik Anda?</p>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" id="statsResetCancelBtn" type="button">Batal</button>
+        <button class="modal-btn modal-btn-confirm" id="statsResetConfirmBtn" type="button">Reset Statistik</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="profileModalOverlay" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+    <div class="modal-card profile-modal-card">
+      <p class="modal-title" id="profileModalTitle">Siapa nama kamu?</p>
+      <p class="profile-modal-sub" id="profileModalSub">Atur nama dan foto profil untuk ditampilkan di game ini. Foto disimpan langsung di perangkat, tidak diunggah ke server.</p>
+
+      <div class="profile-modal-avatar-row">
+        <span class="profile-avatar profile-avatar-lg" id="profileEditAvatar">
+          <img class="profile-avatar-img" id="profileEditAvatarImg" alt="" hidden>
+          <span class="profile-avatar-fallback" id="profileEditAvatarFallback">?</span>
+        </span>
+        <div class="profile-avatar-actions">
+          <button class="avatar-pick-btn" id="avatarPickBtn" type="button">
+            <i class="fa-solid fa-image"></i> Pilih Foto
+          </button>
+          <button class="avatar-remove-btn" id="avatarRemoveBtn" type="button" hidden>Hapus foto</button>
+          <input type="file" id="avatarFileInput" accept="image/*" hidden>
+        </div>
+      </div>
+
+      <label class="profile-name-field">
+        <span>Nama</span>
+        <input type="text" id="profileNameInput" maxlength="24" placeholder="Masukkan nama kamu" autocomplete="off">
+      </label>
+      <p class="profile-error" id="profileError" hidden>Nama tidak boleh kosong.</p>
+
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" id="profileCancelBtn" type="button">Batal</button>
+        <button class="modal-btn modal-btn-primary" id="profileSaveBtn" type="button">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
