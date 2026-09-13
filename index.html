@@ -49,6 +49,29 @@
       </div>
     </header>
 
+    <div class="difficulty-bar" id="difficultyBar" role="group" aria-label="Tingkat kesulitan bot">
+      <p class="panel-label difficulty-label">Tingkat Kesulitan</p>
+      <div class="difficulty-options" id="difficultyOptions">
+        <button class="diff-btn active" type="button" data-diff="easy" aria-pressed="true">
+          <span class="diff-name">Mudah</span>
+          <span class="diff-meta">3×3</span>
+        </button>
+        <button class="diff-btn" type="button" data-diff="normal" aria-pressed="false">
+          <span class="diff-name">Normal</span>
+          <span class="diff-meta">4×4</span>
+        </button>
+        <button class="diff-btn" type="button" data-diff="hard" aria-pressed="false">
+          <span class="diff-name">Hard</span>
+          <span class="diff-meta">5×5</span>
+        </button>
+        <button class="diff-btn diff-locked" type="button" data-diff="extreme" id="diffExtremeBtn" aria-pressed="false" aria-disabled="true">
+          <span class="diff-name">🔒 Ekstrem</span>
+          <span class="diff-meta">6×6</span>
+        </button>
+      </div>
+      <p class="difficulty-unlock-note" id="difficultyUnlockNote">🔒 Menang 50x untuk membuka</p>
+    </div>
+
     <main class="layout">
       <div class="board-column">
         <section class="board-panel" id="boardPanel">
@@ -105,31 +128,21 @@
         </div>
 
         <div class="leaderboard-card">
-          <p class="panel-label">Papan Peringkat</p>
-          <ul class="lb-list" id="lbList" aria-live="polite">
-            <li class="lb-empty">Menang 2x berturut-turut untuk masuk papan peringkat.</li>
-          </ul>
-          <button class="stats-reset-btn" id="statsResetBtn" type="button">Reset statistik</button>
-        </div>
-
-        <div class="player-lb-card">
           <p class="panel-label">Leaderboard Pemain</p>
-          <ol class="player-lb-list" id="playerLbList" aria-live="polite"></ol>
-        </div>
-
-        <div class="live-lb-card">
-          <div class="live-lb-head">
-            <p class="panel-label">Leaderboard Pemain (Live)</p>
-            <span class="live-dot" id="liveDot" aria-hidden="true"></span>
+          <p class="lb-caption">Menang berturut-turut untuk masuk papan peringkat.</p>
+          <ul class="lb-list" id="lbList" aria-live="polite"></ul>
+          <div class="coming-soon-inline">
+            <i class="fa-solid fa-hourglass-half coming-soon-icon" aria-hidden="true"></i>
+            <p class="coming-soon-text">Coming Soon</p>
           </div>
-          <p class="live-lb-status" id="liveLbStatus">Menghubungkan...</p>
-          <ol class="live-lb-list" id="liveLbList" aria-live="polite"></ol>
         </div>
 
         <div class="achv-card">
           <p class="panel-label">Achievements</p>
           <div class="achv-grid" id="achvGrid"></div>
         </div>
+
+        <button class="stats-reset-btn" id="statsResetBtn" type="button">Reset statistik</button>
       </aside>
     </main>
   </div>
@@ -178,8 +191,6 @@
     </div>
   </div>
 
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
