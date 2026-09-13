@@ -7,19 +7,72 @@ const canvas = document.getElementById('gameCanvas');
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let size = 400;
-  let cell = size / 3;
 
-  // ----- Game state (unchanged logic) -----
-  let board = Array(9).fill(null);
+  // ----- Sistem tingkat kesulitan (mode Lawan Bot) -----
+  // Tiap level menentukan ukuran papan (n x n) dan panjang garis menang
+  // (winLen sel berurutan). Untuk 3x3, winLen == n (baris penuh, sama
+  // seperti Tic Tac Toe klasik). Untuk papan yang lebih besar, winLen
+  // dikunci di 4 supaya permainan tetap punya ritme wajar — butuh baris
+  // penuh 5-6 sel nyaris mustahil dan cuma akan membuat semua permainan
+  // berakhir seri.
+  const DIFFICULTIES = {
+    easy:    { key: 'easy',    label: 'Mudah',   meta: '3×3', n: 3, winLen: 3, botLevel: 'random' },
+    normal:  { key: 'normal',  label: 'Normal',  meta: '4×4', n: 4, winLen: 4, botLevel: 'medium' },
+    hard:    { key: 'hard',    label: 'Hard',    meta: '5×5', n: 5, winLen: 4, botLevel: 'hard' },
+    extreme: { key: 'extreme', label: 'Ekstrem', meta: '6×6', n: 6, winLen: 4, botLevel: 'extreme' }
+  };
+
+  let boardN = 3;
+  let winLen = 3;
+  let cell = size / boardN;
+  let currentDifficulty = 'easy';
+
+  function computeWinLines(n, len) {
+    const lines = [];
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c <= n - len; c++) {
+        const line = [];
+        for (let k = 0; k < len; k++) line.push(r * n + (c + k));
+        lines.push(line);
+      }
+    }
+    for (let c = 0; c < n; c++) {
+      for (let r = 0; r <= n - len; r++) {
+        const line = [];
+        for (let k = 0; k < len; k++) line.push((r + k) * n + c);
+        lines.push(line);
+      }
+    }
+    for (let r = 0; r <= n - len; r++) {
+      for (let c = 0; c <= n - len; c++) {
+        const line = [];
+        for (let k = 0; k < len; k++) line.push((r + k) * n + (c + k));
+        lines.push(line);
+      }
+    }
+    for (let r = 0; r <= n - len; r++) {
+      for (let c = len - 1; c < n; c++) {
+        const line = [];
+        for (let k = 0; k < len; k++) line.push((r + k) * n + (c - k));
+        lines.push(line);
+      }
+    }
+    return lines;
+  }
+
+  // ----- Game state (logika dasar tidak berubah, hanya digeneralisasi) -----
+  let winLines = computeWinLines(boardN, winLen);
+  let board = Array(boardN * boardN).fill(null);
   let currentPlayer = 'X';
   let gameOver = false;
   let vsBot = false;
 
-  const WIN_LINES = [
-    [0,1,2],[3,4,5],[6,7,8],
-    [0,3,6],[1,4,7],[2,5,8],
-    [0,4,8],[2,4,6]
-  ];
+  function applyBoardConfig(n, len) {
+    boardN = n;
+    winLen = len;
+    winLines = computeWinLines(n, len);
+    canvas.setAttribute('aria-label', `Papan permainan Tic Tac Toe, ${n} kali ${n} kotak`);
+  }
 
   // ----- Visual-only state -----
   let hoverIdx = -1;
@@ -195,159 +248,6 @@ const canvas = document.getElementById('gameCanvas');
   let stats = loadStats(currentStatsKey());
   scores = stats.scores; // keep existing score-card logic untouched, backed by persisted object
 
-  // ----- Leaderboard Pemain (global, terpisah dari statistik per-mode) -----
-  // Daftar nama pemain tetap, dan disimpan di localStorage secara independen
-  // supaya tidak tercampur/berubah oleh fitur skor, streak, atau achievement
-  // yang sudah ada.
-  const PLAYER_LB_KEY = 'tttPlayerLeaderboardV1';
-
-  // ----- Konfigurasi simulasi kenaikan per pemain (khusus demo) -----
-  // Atur di sini untuk mengubah perilaku tiap pemain secara independen:
-  //   name             - nama pemain (harus unik, dipakai sebagai kunci data)
-  //   initialWins      - jumlah kemenangan awal sebelum simulasi berjalan
-  //   initialDelayMs   - jeda sebelum kenaikan PERTAMA pemain ini (waktu awal
-  //                      berbeda per pemain supaya tidak naik bersamaan)
-  //   intervalMs       - jarak waktu rata-rata antar kenaikan berikutnya
-  //   intervalJitterMs - besar randomisasi (+/-) yang ditambahkan ke setiap
-  //                      interval (termasuk kenaikan pertama) supaya jadwal
-  //                      tidak pernah persis sama tiap siklus
-  //   minAmount/maxAmount - rentang jumlah win yang ditambahkan tiap kenaikan
-  const PLAYER_SIM_CONFIG = [
-    { name: 'Raka',          initialWins: 0, initialDelayMs: 0,                intervalMs: 5  * 60 * 60 * 1000, intervalJitterMs: 2 * 60 * 60 * 1000, minAmount: 1, maxAmount: 2 },
-    { name: 'Dimas sapzz',   initialWins: 0, initialDelayMs: 40  * 60 * 1000,  intervalMs: 8  * 60 * 60 * 1000, intervalJitterMs: 4 * 60 * 60 * 1000, minAmount: 1, maxAmount: 3 },
-    { name: 'Fajar Rama M.', initialWins: 0, initialDelayMs: 95  * 60 * 1000,  intervalMs: 12 * 60 * 60 * 1000, intervalJitterMs: 5 * 60 * 60 * 1000, minAmount: 1, maxAmount: 2 },
-    { name: 'maulana?',      initialWins: 0, initialDelayMs: 150 * 60 * 1000,  intervalMs: 6  * 60 * 60 * 1000, intervalJitterMs: 3 * 60 * 60 * 1000, minAmount: 1, maxAmount: 4 },
-    { name: 'Ardi Nugraha',  initialWins: 0, initialDelayMs: 210 * 60 * 1000,  intervalMs: 20 * 60 * 60 * 1000, intervalJitterMs: 8 * 60 * 60 * 1000, minAmount: 2, maxAmount: 3 },
-    { name: 'Aditya',        initialWins: 0, initialDelayMs: 260 * 60 * 1000,  intervalMs: 4  * 60 * 60 * 1000, intervalJitterMs: 2 * 60 * 60 * 1000, minAmount: 1, maxAmount: 2 },
-    { name: 'Kevin cuyy',    initialWins: 0, initialDelayMs: 320 * 60 * 1000,  intervalMs: 15 * 60 * 60 * 1000, intervalJitterMs: 6 * 60 * 60 * 1000, minAmount: 1, maxAmount: 3 }
-  ];
-  const SIM_MIN_INTERVAL_FLOOR_MS = 15 * 60 * 1000; // batas bawah antar kenaikan, jaga-jaga jika jitter besar
-  const SIM_CHECK_INTERVAL_MS = 5 * 60 * 1000; // cek ulang tiap 5 menit selama tab terbuka
-  const SIM_MAX_CATCHUP_STEPS = 200; // jaga-jaga agar tidak infinite loop jika offline sangat lama
-
-  function getPlayerSimConfig(name) {
-    return PLAYER_SIM_CONFIG.find(cfg => cfg.name === name);
-  }
-
-  // Interval berikutnya = intervalMs pemain tsb +/- intervalJitterMs acak,
-  // dibulatkan dan tidak pernah di bawah SIM_MIN_INTERVAL_FLOOR_MS.
-  function randomSimInterval(config) {
-    const jitter = config.intervalJitterMs || 0;
-    const offset = jitter > 0 ? (Math.random() * jitter * 2 - jitter) : 0;
-    return Math.round(Math.max(config.intervalMs + offset, SIM_MIN_INTERVAL_FLOOR_MS));
-  }
-
-  function randomSimAmount(config) {
-    const min = Number.isFinite(config.minAmount) ? config.minAmount : 1;
-    const max = Number.isFinite(config.maxAmount) ? config.maxAmount : min;
-    return min + Math.floor(Math.random() * (max - min + 1));
-  }
-
-  // Sedikit randomisasi (+/-) yang dipakai khusus untuk menggeser jadwal
-  // kenaikan PERTAMA pemain, terpisah dari randomisasi interval berikutnya.
-  function randomStartJitter(config) {
-    const jitter = config.intervalJitterMs || 0;
-    return jitter > 0 ? Math.round(Math.random() * jitter * 2 - jitter) : 0;
-  }
-
-  function firstBumpAt(now, cfg) {
-    return Math.max(now, now + (cfg.initialDelayMs || 0) + randomStartJitter(cfg));
-  }
-
-  function defaultPlayerLeaderboard() {
-    const now = Date.now();
-    return PLAYER_SIM_CONFIG.map(cfg => ({
-      name: cfg.name,
-      wins: cfg.initialWins || 0,
-      // Waktu awal tiap pemain berbeda (initialDelayMs) plus sedikit
-      // randomisasi tambahan supaya kenaikan pertama tidak pernah bersamaan.
-      nextBumpAt: firstBumpAt(now, cfg)
-    }));
-  }
-
-  function loadPlayerLeaderboard() {
-    try {
-      const raw = localStorage.getItem(PLAYER_LB_KEY);
-      if (!raw) return defaultPlayerLeaderboard();
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return defaultPlayerLeaderboard();
-      const byName = new Map(
-        parsed.filter(p => p && typeof p.name === 'string').map(p => [p.name, p])
-      );
-      // Selalu kembalikan nama-nama dari konfigurasi (jaga urutan awal), pakai
-      // kemenangan tersimpan jika ada, atau initialWins konfigurasi jika belum
-      // pernah tersimpan. Jadwal kenaikan otomatis (nextBumpAt) juga
-      // dipertahankan per nama, atau dibuat baru sesuai konfigurasi pemain
-      // tsb jika belum pernah ada.
-      const now = Date.now();
-      return PLAYER_SIM_CONFIG.map(cfg => {
-        const saved = byName.get(cfg.name);
-        const wins = saved && Number.isFinite(saved.wins) ? saved.wins : (cfg.initialWins || 0);
-        const nextBumpAt = saved && Number.isFinite(saved.nextBumpAt)
-          ? saved.nextBumpAt
-          : firstBumpAt(now, cfg);
-        return { name: cfg.name, wins, nextBumpAt };
-      });
-    } catch (e) {
-      return defaultPlayerLeaderboard();
-    }
-  }
-
-  function savePlayerLeaderboard() {
-    try {
-      localStorage.setItem(PLAYER_LB_KEY, JSON.stringify(playerLeaderboard));
-    } catch (e) {
-      /* localStorage unavailable — fail silently */
-    }
-  }
-
-  let playerLeaderboard = loadPlayerLeaderboard();
-
-  // Terapkan kenaikan yang "sudah waktunya" berdasarkan jadwal tersimpan
-  // (menangani waktu yang berlalu sejak kunjungan terakhir), memakai
-  // konfigurasi interval/jumlah milik masing-masing pemain, lalu jadwalkan
-  // pengecekan berkala selama halaman tetap terbuka. Fungsi ini hanya
-  // menyentuh playerLeaderboard/PLAYER_LB_KEY — tidak pernah mengubah
-  // stats/scores/streak/achievement milik user.
-  function runSimulatedLeaderboardGrowth() {
-    const now = Date.now();
-    let changed = false;
-    playerLeaderboard.forEach(entry => {
-      const cfg = getPlayerSimConfig(entry.name);
-      if (!cfg) return; // pemain tidak lagi terdaftar di konfigurasi
-      let steps = 0;
-      while (entry.nextBumpAt <= now && steps < SIM_MAX_CATCHUP_STEPS) {
-        entry.wins += randomSimAmount(cfg);
-        entry.nextBumpAt = entry.nextBumpAt + randomSimInterval(cfg);
-        changed = true;
-        steps++;
-      }
-    });
-    if (changed) {
-      savePlayerLeaderboard();
-      renderPlayerLeaderboard();
-    }
-  }
-
-  const playerLbListEl = document.getElementById('playerLbList');
-
-  function renderPlayerLeaderboard() {
-    const ranked = playerLeaderboard
-      .map((p, i) => ({ ...p, order: i }))
-      .sort((a, b) => b.wins - a.wins || a.order - b.order);
-    playerLbListEl.innerHTML = '';
-    ranked.forEach((p, i) => {
-      const li = document.createElement('li');
-      li.className = 'player-lb-row' + (i === 0 && p.wins > 0 ? ' is-leader' : '');
-      li.innerHTML = `
-        <span class="player-lb-rank">#${i + 1}</span>
-        <span class="player-lb-name">${p.name}</span>
-        <span class="player-lb-score">${p.wins}</span>
-      `;
-      playerLbListEl.appendChild(li);
-    });
-  }
-
   // Menampilkan ulang seluruh panel statistik (skor, streak, leaderboard,
   // achievement) sesuai data mode yang sedang aktif.
   function refreshStatsUI() {
@@ -382,28 +282,39 @@ const canvas = document.getElementById('gameCanvas');
       : 'Rekor terbaik: -';
   }
 
+  const MEDALS = ['gold', 'silver', 'bronze'];
+  const LB_MAX_SLOTS = 5; // data tetap disimpan top 5, hanya tampilan yang diringkas
+  const LB_VISIBLE_RANKS = 3;
+
   function updateLeaderboardUI() {
     lbListEl.innerHTML = '';
-    if (!stats.leaderboard.length) {
+    for (let i = 0; i < LB_VISIBLE_RANKS; i++) {
+      const entry = stats.leaderboard[i];
+      const medal = MEDALS[i];
       const li = document.createElement('li');
-      li.className = 'lb-empty';
-      li.textContent = 'Menang 2x berturut-turut untuk masuk papan peringkat.';
+      li.className = 'lb-row' + (medal ? ' lb-row-' + medal : '') + (entry ? '' : ' lb-row-empty');
+      const rankHtml = `<span class="lb-rank${medal ? ' lb-rank-' + medal : ''}">${i + 1}.</span>`;
+      if (entry) {
+        li.innerHTML = `
+          ${rankHtml}
+          <span class="lb-badge lb-${entry.player.toLowerCase()}">${entry.player}</span>
+          <span class="lb-meta">
+            <span class="lb-count">${entry.count}x berturut-turut</span>
+            <span class="lb-date">${formatDate(entry.date)}</span>
+          </span>
+        `;
+      } else {
+        li.innerHTML = `
+          ${rankHtml}
+          <span class="lb-placeholder">???</span>
+        `;
+      }
       lbListEl.appendChild(li);
-      return;
     }
-    stats.leaderboard.forEach((entry, i) => {
-      const li = document.createElement('li');
-      li.className = 'lb-row';
-      li.innerHTML = `
-        <span class="lb-rank">#${i + 1}</span>
-        <span class="lb-badge lb-${entry.player.toLowerCase()}">${entry.player}</span>
-        <span class="lb-meta">
-          <span class="lb-count">${entry.count}x berturut-turut</span>
-          <span class="lb-date">${formatDate(entry.date)}</span>
-        </span>
-      `;
-      lbListEl.appendChild(li);
-    });
+    const dst = document.createElement('li');
+    dst.className = 'lb-dst';
+    dst.textContent = 'dst.';
+    lbListEl.appendChild(dst);
   }
 
   function finalizeStreak() {
@@ -674,165 +585,89 @@ const canvas = document.getElementById('gameCanvas');
     openProfileModal('setup');
   }
 
-  // ----- Live Leaderboard Pemain (Firebase Firestore, real-time lintas pengunjung) -----
-  // Terpisah total dari "Leaderboard Pemain" demo di atas (yang isinya 7
-  // nama tetap dengan simulasi kenaikan). Kartu ini isinya PEMAIN ASLI:
-  // nama diambil dari Profile yang sudah dibuat, dan win/loss/draw dikirim
-  // ke Firestore setiap kali menang/kalah/seri di mode Lawan Bot, lalu
-  // disiarkan secara live (onSnapshot) ke semua pengunjung web lain.
-  //
-  // CARA MENGAKTIFKAN:
-  //   1. Buat project gratis di https://console.firebase.google.com
-  //   2. Aktifkan Firestore Database (mode production/locked, lalu pasang
-  //      security rules di bawah).
-  //   3. Project settings -> General -> Your apps -> tambah "Web app" ->
-  //      copy objek firebaseConfig ke FIREBASE_CONFIG di bawah ini.
-  //   4. Firestore Rules (Firestore -> Rules), supaya publik hanya bisa
-  //      baca dan menaikkan angka wajar (bukan menulis bebas):
-  //
-  //      rules_version = '2';
-  //      service cloud.firestore {
-  //        match /databases/{database}/documents {
-  //          match /players/{playerId} {
-  //            allow read: if true;
-  //            allow create: if request.resource.data.wins is int
-  //              && request.resource.data.losses is int
-  //              && request.resource.data.draws is int
-  //              && request.resource.data.matches is int
-  //              && request.resource.data.name is string
-  //              && request.resource.data.name.size() <= 24;
-  //            allow update: if request.resource.data.name is string
-  //              && request.resource.data.name.size() <= 24
-  //              && request.resource.data.wins is int
-  //              && request.resource.data.wins <= resource.data.wins + 1
-  //              && request.resource.data.losses is int
-  //              && request.resource.data.losses <= resource.data.losses + 1
-  //              && request.resource.data.draws is int
-  //              && request.resource.data.draws <= resource.data.draws + 1;
-  //          }
-  //        }
-  //      }
-  //
-  // Selama FIREBASE_CONFIG masih placeholder, fitur ini otomatis nonaktif
-  // (tanpa error) dan kartunya menampilkan status "belum diatur" — jadi
-  // file ini tetap aman dibuka apa adanya sebelum config diisi.
-  const FIREBASE_CONFIG = {
-    apiKey: 'GANTI_DENGAN_API_KEY',
-    authDomain: 'GANTI_DENGAN_PROJECT.firebaseapp.com',
-    projectId: 'GANTI_DENGAN_PROJECT_ID',
-    storageBucket: 'GANTI_DENGAN_PROJECT.appspot.com',
-    messagingSenderId: 'GANTI_DENGAN_SENDER_ID',
-    appId: 'GANTI_DENGAN_APP_ID'
-  };
+  // ----- Unlock progress level Ekstrem (localStorage) -----
+  // Ekstrem terkunci sampai pemain menang 50x di mode Lawan Bot (dihitung
+  // gabungan dari semua level yang sudah terbuka). Progress ini terpisah
+  // dari statistik skor/streak supaya tetap konsisten walau pemain
+  // mereset statistik lewat tombol "Reset statistik".
+  const EXTREME_UNLOCK_KEY = 'tttExtremeUnlockV1';
+  const EXTREME_UNLOCK_WINS = 50;
+  const DIFFICULTY_KEY = 'tttDifficultyV1';
 
-  const LIVE_PLAYER_ID_KEY = 'tttLivePlayerIdV1';
-  const liveLbListEl = document.getElementById('liveLbList');
-  const liveLbStatusEl = document.getElementById('liveLbStatus');
-  const liveDotEl = document.getElementById('liveDot');
-
-  function isFirebaseConfigured() {
-    return !!FIREBASE_CONFIG.apiKey && !FIREBASE_CONFIG.apiKey.startsWith('GANTI_');
-  }
-
-  // Setiap browser/perangkat punya satu ID acak tersimpan sendiri, dipakai
-  // sebagai kunci dokumen Firestore-nya supaya kemenangan dari perangkat
-  // ini selalu terakumulasi ke baris yang sama (bukan menimpa punya orang
-  // lain yang kebetulan pakai nama sama).
-  function getOrCreateLivePlayerId() {
+  function loadExtremeUnlock() {
     try {
-      let id = localStorage.getItem(LIVE_PLAYER_ID_KEY);
-      if (!id) {
-        id = 'p_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
-        localStorage.setItem(LIVE_PLAYER_ID_KEY, id);
-      }
-      return id;
+      const raw = localStorage.getItem(EXTREME_UNLOCK_KEY);
+      if (!raw) return { wins: 0, unlocked: false };
+      const parsed = JSON.parse(raw);
+      return {
+        wins: Number.isFinite(parsed.wins) ? parsed.wins : 0,
+        unlocked: !!parsed.unlocked
+      };
     } catch (e) {
-      return 'p_' + Math.random().toString(36).slice(2, 10);
+      return { wins: 0, unlocked: false };
     }
   }
 
-  function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-  }
-
-  let liveDb = null;
-
-  function setLiveStatus(text, state) {
-    liveLbStatusEl.textContent = text;
-    liveDotEl.className = 'live-dot' + (state ? ' live-dot-' + state : '');
-  }
-
-  function renderLiveLeaderboard(players) {
-    liveLbListEl.innerHTML = '';
-    if (!players.length) {
-      const li = document.createElement('li');
-      li.className = 'lb-empty';
-      li.textContent = 'Belum ada data. Menangkan pertandingan mode Lawan Bot untuk tampil di sini.';
-      liveLbListEl.appendChild(li);
-      return;
-    }
-    players.forEach((p, i) => {
-      const li = document.createElement('li');
-      li.className = 'player-lb-row' + (i === 0 && p.wins > 0 ? ' is-leader' : '');
-      li.innerHTML = `
-        <span class="player-lb-rank">#${i + 1}</span>
-        <span class="player-lb-name">${escapeHtml(p.name || 'Pemain')}</span>
-        <span class="player-lb-score">${p.wins || 0}</span>
-      `;
-      liveLbListEl.appendChild(li);
-    });
-  }
-
-  function initLiveLeaderboard() {
-    if (!isFirebaseConfigured()) {
-      setLiveStatus('Belum diatur — isi FIREBASE_CONFIG di script.js', 'off');
-      return;
-    }
-    if (typeof firebase === 'undefined') {
-      setLiveStatus('SDK Firebase gagal dimuat', 'error');
-      return;
-    }
+  function saveExtremeUnlock() {
     try {
-      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-      liveDb = firebase.firestore();
-      setLiveStatus('Menghubungkan...', 'connecting');
-
-      liveDb.collection('players').orderBy('wins', 'desc').limit(20)
-        .onSnapshot(
-          snapshot => {
-            renderLiveLeaderboard(snapshot.docs.map(d => d.data()));
-            setLiveStatus('Live — tersinkron ke semua pengunjung', 'live');
-          },
-          err => {
-            console.error('Live leaderboard error:', err);
-            setLiveStatus('Gagal terhubung ke server', 'error');
-          }
-        );
+      localStorage.setItem(EXTREME_UNLOCK_KEY, JSON.stringify(extremeUnlock));
     } catch (e) {
-      console.error('Firebase init error:', e);
-      setLiveStatus('Gagal terhubung ke server', 'error');
+      /* localStorage unavailable — fail silently */
     }
   }
 
-  // Kirim hasil (mode Lawan Bot saja) ke Firestore untuk profil aktif.
-  // Mode 2 Pemain sengaja tidak dikirim karena satu perangkat dipakai
-  // bergantian oleh dua orang, jadi tidak jelas kemenangan itu milik siapa.
-  // Tidak pernah mengirim foto profil supaya datanya tetap ringan.
-  function reportLiveResult(outcome) {
-    if (!liveDb || !profile || !profile.name) return;
-    const ref = liveDb.collection('players').doc(getOrCreateLivePlayerId());
-    const field = outcome === 'win' ? 'wins' : outcome === 'loss' ? 'losses' : 'draws';
-    liveDb.runTransaction(tx => tx.get(ref).then(snap => {
-      const data = snap.exists ? snap.data() : { name: profile.name, wins: 0, losses: 0, draws: 0, matches: 0 };
-      data.name = profile.name;
-      data[field] = (data[field] || 0) + 1;
-      data.matches = (data.matches || 0) + 1;
-      data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-      tx.set(ref, data);
-    })).catch(e => console.error('Gagal mengirim hasil live:', e));
+  let extremeUnlock = loadExtremeUnlock();
+
+  function isExtremeUnlocked() {
+    return extremeUnlock.unlocked || extremeUnlock.wins >= EXTREME_UNLOCK_WINS;
   }
 
-  initLiveLeaderboard();
+  function registerBotWinForUnlock() {
+    if (isExtremeUnlocked()) return;
+    extremeUnlock.wins++;
+    const justUnlocked = extremeUnlock.wins >= EXTREME_UNLOCK_WINS;
+    if (justUnlocked) extremeUnlock.unlocked = true;
+    saveExtremeUnlock();
+    updateDifficultyUI();
+    if (justUnlocked) showExtremeUnlockToast();
+  }
+
+  function showExtremeUnlockToast() {
+    const toast = document.createElement('div');
+    toast.className = 'achv-toast';
+    toast.innerHTML = `
+      <div class="achv-toast-icon"><i class="fa-solid fa-lock-open"></i></div>
+      <div class="achv-toast-text">
+        <span class="achv-toast-label">Level Terbuka</span>
+        <span class="achv-toast-title">Ekstrem (6×6)</span>
+      </div>
+    `;
+    achvToastContainer.appendChild(toast);
+    requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.add('show')));
+    const holdMs = reduceMotion ? 2200 : 2600;
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), reduceMotion ? 0 : 400);
+    }, holdMs);
+  }
+
+  function loadDifficulty() {
+    try {
+      const raw = localStorage.getItem(DIFFICULTY_KEY);
+      if (raw && DIFFICULTIES[raw]) return raw;
+    } catch (e) {
+      /* localStorage unavailable — fail silently */
+    }
+    return 'easy';
+  }
+
+  function saveDifficulty(diff) {
+    try {
+      localStorage.setItem(DIFFICULTY_KEY, diff);
+    } catch (e) {
+      /* localStorage unavailable — fail silently */
+    }
+  }
 
   // ----- Score-card labels adapt to game mode (values/logic unchanged) -----
   // Pemain selalu bermain sebagai X dan bot selalu sebagai O, jadi di mode
@@ -858,7 +693,7 @@ const canvas = document.getElementById('gameCanvas');
     const rect = boardCard.getBoundingClientRect();
     const cssSize = Math.max(rect.width - (parseFloat(getComputedStyle(boardCard).paddingLeft) * 2), 200);
     size = cssSize;
-    cell = size / 3;
+    cell = size / boardN;
     canvas.width = Math.round(size * dpr);
     canvas.height = Math.round(size * dpr);
     canvas.style.width = size + 'px';
@@ -868,8 +703,8 @@ const canvas = document.getElementById('gameCanvas');
   }
 
   function cellCenter(idx) {
-    const col = idx % 3;
-    const row = Math.floor(idx / 3);
+    const col = idx % boardN;
+    const row = Math.floor(idx / boardN);
     return { x: col * cell + cell / 2, y: row * cell + cell / 2 };
   }
 
@@ -877,7 +712,7 @@ const canvas = document.getElementById('gameCanvas');
     ctx.strokeStyle = LINE_COLOR;
     ctx.lineWidth = 1.5;
     ctx.lineCap = 'round';
-    for (let i = 1; i < 3; i++) {
+    for (let i = 1; i < boardN; i++) {
       ctx.beginPath();
       ctx.moveTo(i * cell, size * 0.04);
       ctx.lineTo(i * cell, size * 0.96);
@@ -949,7 +784,9 @@ const canvas = document.getElementById('gameCanvas');
 
   function drawWinLine(now) {
     if (!winInfo) return;
-    const [a, , c] = winInfo.line;
+    const line = winInfo.line;
+    const a = line[0];
+    const c = line[line.length - 1];
     const start = cellCenter(a);
     const end = cellCenter(c);
     const t = reduceMotion ? 1 : Math.min((now - winInfo.startTime) / LINE_ANIM_MS, 1);
@@ -986,18 +823,22 @@ const canvas = document.getElementById('gameCanvas');
     requestAnimationFrame(loop);
   }
 
-  // ----- Game logic (unchanged) -----
-  function checkWinner() {
-    for (const line of WIN_LINES) {
-      const [a, b, c] = line;
-      if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-        return { winner: board[a], line };
+  // ----- Game logic (digeneralisasi untuk papan n x n) -----
+  function checkWinnerOn(b, lines) {
+    for (const line of lines) {
+      const first = b[line[0]];
+      if (first && line.every(idx => b[idx] === first)) {
+        return { winner: first, line };
       }
     }
-    if (board.every(cellVal => cellVal !== null)) {
+    if (b.every(cellVal => cellVal !== null)) {
       return { winner: 'draw', line: null };
     }
     return null;
+  }
+
+  function checkWinner() {
+    return checkWinnerOn(board, winLines);
   }
 
   function setStatus(html, cls) {
@@ -1044,19 +885,160 @@ const canvas = document.getElementById('gameCanvas');
     }
     hoverIdx = -1;
     recordStreak(result.winner);
-
-    // Live Leaderboard: hanya mode Lawan Bot, karena pemain manusia selalu
-    // berperan sebagai X di mode ini.
-    if (vsBot) {
-      const outcome = result.winner === 'draw' ? 'draw' : (result.winner === 'X' ? 'win' : 'loss');
-      reportLiveResult(outcome);
+    if (vsBot && result.winner === 'X') {
+      registerBotWinForUnlock();
     }
   }
 
+  // ----- Kecerdasan bot, bertingkat sesuai difficulty -----
+  function emptyIndices(b) {
+    const out = [];
+    for (let i = 0; i < b.length; i++) if (b[i] === null) out.push(i);
+    return out;
+  }
+
+  function randomMove(empties) {
+    return empties[Math.floor(Math.random() * empties.length)];
+  }
+
+  // Cari sel yang langsung membuat `player` menang bila diisi sekarang.
+  function findImmediateWin(b, lines, player) {
+    const empties = emptyIndices(b);
+    for (const idx of empties) {
+      b[idx] = player;
+      const win = checkWinnerOn(b, lines);
+      b[idx] = null;
+      if (win && win.winner === player) return idx;
+    }
+    return -1;
+  }
+
+  // Skor heuristik papan dari sudut pandang bot (O): tiap garis yang
+  // masih "hidup" (belum diblok lawan) menyumbang skor eksponensial
+  // sesuai jumlah tanda yang sudah mengisinya — garis dengan banyak
+  // tanda dan berpotensi menang dinilai jauh lebih tinggi.
+  function evaluateLinesScore(b, lines) {
+    let score = 0;
+    for (const line of lines) {
+      let o = 0, x = 0;
+      for (const idx of line) {
+        if (b[idx] === 'O') o++;
+        else if (b[idx] === 'X') x++;
+      }
+      if (o > 0 && x > 0) continue;
+      if (o > 0) score += Math.pow(9, o);
+      else if (x > 0) score -= Math.pow(9, x) * 1.15;
+    }
+    return score;
+  }
+
+  // Batasi kandidat langkah di papan besar supaya pencarian tetap cepat:
+  // hanya sel kosong yang bertetangga (radius 1) dengan sel terisi.
+  function restrictCandidates(empties) {
+    if (boardN <= 4 || empties.length === boardN * boardN) return empties;
+    const set = new Set();
+    for (let idx = 0; idx < board.length; idx++) {
+      if (board[idx] === null) continue;
+      const col = idx % boardN, row = Math.floor(idx / boardN);
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const r = row + dr, c = col + dc;
+          if (r >= 0 && r < boardN && c >= 0 && c < boardN) {
+            const ni = r * boardN + c;
+            if (board[ni] === null) set.add(ni);
+          }
+        }
+      }
+    }
+    return set.size ? Array.from(set) : empties;
+  }
+
+  // Normal: menang/blok 1 langkah, selain itu asal-asalan.
+  function mediumBotMove() {
+    const empties = emptyIndices(board);
+    const winIdx = findImmediateWin(board, winLines, 'O');
+    if (winIdx !== -1) return winIdx;
+    const blockIdx = findImmediateWin(board, winLines, 'X');
+    if (blockIdx !== -1) return blockIdx;
+    return randomMove(empties);
+  }
+
+  // Hard: menang/blok 1 langkah, lalu pilih sel bernilai heuristik
+  // tertinggi (rakus, tanpa memikirkan balasan lawan).
+  function hardBotMove() {
+    const empties = emptyIndices(board);
+    const winIdx = findImmediateWin(board, winLines, 'O');
+    if (winIdx !== -1) return winIdx;
+    const blockIdx = findImmediateWin(board, winLines, 'X');
+    if (blockIdx !== -1) return blockIdx;
+    let bestScore = -Infinity, bestMoves = [];
+    for (const idx of empties) {
+      board[idx] = 'O';
+      const s = evaluateLinesScore(board, winLines);
+      board[idx] = null;
+      if (s > bestScore) { bestScore = s; bestMoves = [idx]; }
+      else if (s === bestScore) bestMoves.push(idx);
+    }
+    return bestMoves.length ? randomMove(bestMoves) : randomMove(empties);
+  }
+
+  // Ekstrem: menang 1 langkah, lalu pencarian 2 langkah (gerakan bot ->
+  // balasan terbaik lawan) supaya bot menghindari langkah yang membuka
+  // peluang menang bagi lawan di giliran berikutnya.
+  function extremeBotMove() {
+    const winIdx = findImmediateWin(board, winLines, 'O');
+    if (winIdx !== -1) return winIdx;
+
+    const empties = emptyIndices(board);
+    let candidates = restrictCandidates(empties);
+    const blockIdx = findImmediateWin(board, winLines, 'X');
+    if (blockIdx !== -1 && !candidates.includes(blockIdx)) candidates = candidates.concat(blockIdx);
+
+    let bestScore = -Infinity, bestMoves = [];
+    for (const idx of candidates) {
+      board[idx] = 'O';
+      const winNow = checkWinnerOn(board, winLines);
+      let score;
+      if (winNow && winNow.winner === 'O') {
+        score = 100000;
+      } else {
+        const empties2 = emptyIndices(board);
+        let candidates2 = restrictCandidates(empties2);
+        const oppWinIdx = findImmediateWin(board, winLines, 'X');
+        if (oppWinIdx !== -1 && !candidates2.includes(oppWinIdx)) candidates2 = candidates2.concat(oppWinIdx);
+        if (!candidates2.length) {
+          score = evaluateLinesScore(board, winLines);
+        } else {
+          let worst = Infinity;
+          for (const idx2 of candidates2) {
+            board[idx2] = 'X';
+            const win2 = checkWinnerOn(board, winLines);
+            const s2 = (win2 && win2.winner === 'X') ? -100000 : evaluateLinesScore(board, winLines);
+            board[idx2] = null;
+            if (s2 < worst) worst = s2;
+          }
+          score = worst;
+        }
+      }
+      board[idx] = null;
+      if (score > bestScore) { bestScore = score; bestMoves = [idx]; }
+      else if (score === bestScore) bestMoves.push(idx);
+    }
+    return bestMoves.length ? randomMove(bestMoves) : (blockIdx !== -1 ? blockIdx : randomMove(empties));
+  }
+
   function botMove() {
-    const empty = board.map((v, i) => v === null ? i : null).filter(v => v !== null);
-    if (empty.length === 0) return;
-    const pick = empty[Math.floor(Math.random() * empty.length)];
+    const empties = emptyIndices(board);
+    if (empties.length === 0) return;
+    let pick;
+    const level = DIFFICULTIES[currentDifficulty] ? DIFFICULTIES[currentDifficulty].botLevel : 'random';
+    switch (level) {
+      case 'medium': pick = mediumBotMove(); break;
+      case 'hard': pick = hardBotMove(); break;
+      case 'extreme': pick = extremeBotMove(); break;
+      default: pick = randomMove(empties); break;
+    }
+    if (pick === undefined || pick === -1 || board[pick] !== null) pick = randomMove(empties);
     board[pick] = 'O';
     placedAt[pick] = performance.now();
   }
@@ -1069,8 +1051,8 @@ const canvas = document.getElementById('gameCanvas');
     const y = (clientY - rect.top) * scaleY;
     const col = Math.floor(x / cell);
     const row = Math.floor(y / cell);
-    if (col < 0 || col > 2 || row < 0 || row > 2) return -1;
-    return row * 3 + col;
+    if (col < 0 || col >= boardN || row < 0 || row >= boardN) return -1;
+    return row * boardN + col;
   }
 
   canvas.addEventListener('mousemove', (e) => {
@@ -1124,7 +1106,7 @@ const canvas = document.getElementById('gameCanvas');
   document.getElementById('resetBtn').addEventListener('click', resetGame);
 
   function resetGame() {
-    board = Array(9).fill(null);
+    board = Array(boardN * boardN).fill(null);
     currentPlayer = 'X';
     gameOver = false;
     placedAt = {};
@@ -1138,6 +1120,58 @@ const canvas = document.getElementById('gameCanvas');
   const modeVsPlayer = document.getElementById('modeVsPlayer');
   const modeVsBot = document.getElementById('modeVsBot');
 
+  // ----- Difficulty bar (hanya tampil saat mode Lawan Bot aktif) -----
+  const difficultyBar = document.getElementById('difficultyBar');
+  const diffButtons = Array.from(document.querySelectorAll('.diff-btn'));
+  const difficultyUnlockNote = document.getElementById('difficultyUnlockNote');
+
+  function showDifficultyBar(show) {
+    difficultyBar.classList.toggle('show', show);
+  }
+
+  function updateDifficultyUI() {
+    const unlocked = isExtremeUnlocked();
+    diffButtons.forEach(btn => {
+      const key = btn.dataset.diff;
+      const isLockedBtn = key === 'extreme' && !unlocked;
+      btn.classList.toggle('active', key === currentDifficulty);
+      btn.classList.toggle('diff-locked', isLockedBtn);
+      btn.setAttribute('aria-disabled', isLockedBtn ? 'true' : 'false');
+      btn.setAttribute('aria-pressed', key === currentDifficulty ? 'true' : 'false');
+      if (key === 'extreme') {
+        const nameEl = btn.querySelector('.diff-name');
+        if (nameEl) nameEl.textContent = unlocked ? 'Ekstrem' : '🔒 Ekstrem';
+      }
+    });
+    if (unlocked) {
+      difficultyUnlockNote.hidden = true;
+    } else {
+      difficultyUnlockNote.hidden = false;
+      difficultyUnlockNote.innerHTML = `🔒 Menang 50x untuk membuka <span class="difficulty-unlock-progress">(${extremeUnlock.wins}/${EXTREME_UNLOCK_WINS} menang)</span>`;
+    }
+  }
+
+  function setDifficulty(diff) {
+    if (diff === 'extreme' && !isExtremeUnlocked()) diff = 'easy';
+    currentDifficulty = diff;
+    saveDifficulty(diff);
+    const cfg = DIFFICULTIES[diff];
+    applyBoardConfig(cfg.n, cfg.winLen);
+    updateDifficultyUI();
+    resetGame();
+    resizeCanvas();
+  }
+
+  diffButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.diff;
+      if (!DIFFICULTIES[key]) return;
+      if (key === 'extreme' && !isExtremeUnlocked()) return;
+      if (key === currentDifficulty) return;
+      setDifficulty(key);
+    });
+  });
+
   function switchMode(toVsBot) {
     if (vsBot === toVsBot) return;
     vsBot = toVsBot;
@@ -1145,7 +1179,16 @@ const canvas = document.getElementById('gameCanvas');
     scores = stats.scores;
     updateScoreLabels();
     refreshStatsUI();
-    resetGame();
+    showDifficultyBar(vsBot);
+    if (vsBot) {
+      let diff = loadDifficulty();
+      if (diff === 'extreme' && !isExtremeUnlocked()) diff = 'easy';
+      setDifficulty(diff);
+    } else {
+      applyBoardConfig(3, 3);
+      resetGame();
+      resizeCanvas();
+    }
   }
 
   modeVsPlayer.addEventListener('click', () => {
@@ -1166,10 +1209,9 @@ const canvas = document.getElementById('gameCanvas');
   // ----- Init -----
   updateScoreLabels();
   refreshStatsUI();
-  renderPlayerLeaderboard();
-  runSimulatedLeaderboardGrowth();
-  setInterval(runSimulatedLeaderboardGrowth, SIM_CHECK_INTERVAL_MS);
   checkAchievements(false);
+  updateDifficultyUI();
+  showDifficultyBar(false);
   resizeCanvas();
   updateTurnUI();
   if (reduceMotion) {
